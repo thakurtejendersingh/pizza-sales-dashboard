@@ -7,8 +7,6 @@ import seaborn as sns
 try:
     df = pd.read_csv("Data Model - Pizza Sales.xlsx - pizza_sales.csv")
     print("CSV loaded successfully.")
-    # print(df.head()) # Commenting out to keep output concise for final code
-    # print(df.info()) # Commenting out to keep output concise for final code
 except FileNotFoundError:
     print("Error: 'Data Model - Pizza Sales.xlsx - pizza_sales.csv' not found. Please ensure the file is in the correct directory.")
     exit() # Exit if file not found as further operations will fail
@@ -19,7 +17,6 @@ df['order_date'] = pd.to_datetime(df['order_date'])
 df['order_time'] = pd.to_datetime(df['order_time']).dt.time
 
 print("\n--- Data Preprocessing Complete ---")
-# print(df.info()) # Commenting out to keep output concise for final code
 
 
 # --- 2. Key Performance Indicators (KPIs) Calculation ---
