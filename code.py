@@ -2,11 +2,12 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import datetime
 
 # Set Streamlit page configuration
-st.set_page_config(layout="wide", page_title="Pizza Sales Dashboard")
+st.set_page_config(layout="wide", page_title="Enhanced Pizza Sales Dashboard")
 
-st.title("🍕 Pizza Sales Dashboard")
+st.title("🍕 Enhanced Pizza Sales Dashboard")
 
 # --- Data Loading and Preprocessing ---
 @st.cache_data # Cache data to prevent re-loading on every rerun
@@ -14,10 +15,9 @@ def load_data():
     try:
         df = pd.read_csv("Data Model - Pizza Sales.xlsx - pizza_sales.csv")
         df['order_date'] = pd.to_datetime(df['order_date'])
-        # Handle cases where 'order_time' might be just time strings
-        # If 'order_time' can be just 'HH:MM:SS', it's best to keep it as string or convert to timedelta/proper time
-        # For simple display, treating it as datetime and extracting time is common.
-        df['order_time'] = pd.to_datetime(df['order_time'], format='%H:%M:%S').dt.time
+        # Convert 'order_time' to datetime.time objects
+        # Using a fixed format for parsing time to avoid issues with different string formats
+        df['order_time'] = df['order_time'].apply(lambda x: datetime.datetime.strptime(str(x), '%H:%M:%S').time())
         return df
     except FileNotFoundError:
         st.error("Error: 'Data Model - Pizza Sales.xlsx - pizza_sales.csv' not found. Please ensure the file is in the correct directory.")
@@ -31,11 +31,12 @@ df = load_data()
 if df is None:
     st.stop() # Stop if data loading failed
 
-# --- Filters (Optional, but good for dashboards) ---
+# --- Filters ---
 st.sidebar.header("Filter Options")
+
+# Date Range Filter
 min_date = df['order_date'].min().date()
 max_date = df['order_date'].max().date()
-
 date_range = st.sidebar.date_input(
     "Select Date Range",
     value=(min_date, max_date),
@@ -43,21 +44,56 @@ date_range = st.sidebar.date_input(
     max_value=max_date
 )
 
+df_filtered = df.copy()
+
 if len(date_range) == 2:
     start_date, end_date = date_range
-    df_filtered = df[(df['order_date'].dt.date >= start_date) & (df['order_date'].dt.date <= end_date)].copy()
+    df_filtered = df_filtered[(df_filtered['order_date'].dt.date >= start_date) & (df_filtered['order_date'].dt.date <= end_date)].copy()
+elif len(date_range) == 1:
+    # If only one date is selected, filter for that specific day
+    selected_date = date_range[0]
+    df_filtered = df_filtered[df_filtered['order_date'].dt.date == selected_date].copy()
 else:
-    df_filtered = df.copy()
-    st.sidebar.warning("Please select a start and end date.")
+    st.sidebar.warning("Please select a start and end date for the filter.")
+
+# Pizza Category Filter
+all_categories = df_filtered['pizza_category'].unique().tolist()
+selected_categories = st.sidebar.multiselect(
+    "Select Pizza Category(s)",
+    options=all_categories,
+    default=all_categories # Select all by default
+)
+if selected_categories:
+    df_filtered = df_filtered[df_filtered['pizza_category'].isin(selected_categories)].copy()
+
+# Pizza Size Filter
+all_sizes = df_filtered['pizza_size'].unique().tolist()
+selected_sizes = st.sidebar.multiselect(
+    "Select Pizza Size(s)",
+    options=all_sizes,
+    default=all_sizes # Select all by default
+)
+if selected_sizes:
+    df_filtered = df_filtered[df_filtered['pizza_size'].isin(selected_sizes)].copy()
+
+# Pizza Name Filter (Top N for performance/usability)
+all_pizza_names = df_filtered['pizza_name'].unique().tolist()
+selected_pizza_names = st.sidebar.multiselect(
+    "Select Pizza Name(s)",
+    options=all_pizza_names,
+    default=all_pizza_names # Select all by default
+)
+if selected_pizza_names:
+    df_filtered = df_filtered[df_filtered['pizza_name'].isin(selected_pizza_names)].copy()
 
 
 if df_filtered.empty:
-    st.warning("No data available for the selected date range. Please adjust the filters.")
+    st.warning("No data available for the selected filters. Please adjust the filters.")
     st.stop()
 
 
-# --- 2. Key Performance Indicators (KPIs) ---
-st.header("Key Performance Indicators")
+# --- Key Performance Indicators (KPIs) ---
+st.header("Key Performance Indicators (KPIs)")
 
 # Recalculate KPIs based on filtered data
 total_revenue = df_filtered['total_price'].sum()
@@ -66,29 +102,26 @@ avg_order_value = total_revenue / total_orders if total_orders else 0
 total_pizzas_sold = df_filtered['quantity'].sum()
 avg_pizzas_per_order = total_pizzas_sold / total_orders if total_orders else 0
 
-col1, col2, col3, col4, col5 = st.columns(5)
-with col1:
+kpi_col1, kpi_col2, kpi_col3, kpi_col4, kpi_col5 = st.columns(5)
+with kpi_col1:
     st.metric(label="Total Revenue", value=f"${total_revenue:,.2f}")
-with col2:
+with kpi_col2:
     st.metric(label="Average Order Value", value=f"${avg_order_value:,.2f}")
-with col3:
+with kpi_col3:
     st.metric(label="Total Pizzas Sold", value=f"{total_pizzas_sold:,}")
-with col4:
+with kpi_col4:
     st.metric(label="Total Orders", value=f"{total_orders:,}")
-with col5:
+with kpi_col5:
     st.metric(label="Avg Pizzas Per Order", value=f"{avg_pizzas_per_order:,.2f}")
 
 st.markdown("---")
 
-# --- Dashboard Layout for Charts ---
-st.header("Sales Trends and Insights")
+# --- Sales Trends and Insights ---
+st.header("Sales Trends and Performance")
 
-row1_col1, row1_col2 = st.columns(2)
-row2_col1, row2_col2 = st.columns(2)
-row3_col1, row3_col2 = st.columns(2)
-row4_col1, row4_col2 = st.columns(2) # Added a row for more charts
+trend_col1, trend_col2 = st.columns(2)
 
-with row1_col1:
+with trend_col1:
     # --- Monthly Trend for Orders (Line Chart) ---
     st.subheader("Monthly Trend for Orders")
     df_filtered['month_name'] = df_filtered['order_date'].dt.strftime('%B')
@@ -107,7 +140,7 @@ with row1_col1:
     st.pyplot(fig)
 
 
-with row1_col2:
+with trend_col2:
     # --- Daily Trend for Total Orders (Line Chart) ---
     st.subheader("Daily Trend for Total Orders")
     df_filtered['day_of_week'] = df_filtered['order_date'].dt.day_name()
@@ -128,8 +161,53 @@ with row1_col2:
     plt.xticks(rotation=45)
     st.pyplot(fig)
 
+# --- New Segments: Hourly Trends ---
+st.header("Hourly Analysis")
+hourly_col1, hourly_col2 = st.columns(2)
 
-with row2_col1:
+with hourly_col1:
+    # --- Hourly Trend for Orders ---
+    st.subheader("Total Orders by Hour of Day")
+    # Extract hour from order_time (datetime.time object)
+    df_filtered['order_hour'] = df_filtered['order_time'].apply(lambda x: x.hour)
+    hourly_orders = df_filtered.groupby('order_hour').agg(
+        Total_Orders=('order_id', 'nunique')
+    ).reset_index().sort_values('order_hour')
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.lineplot(data=hourly_orders, x='order_hour', y='Total_Orders', marker='o', ax=ax)
+    ax.set_title('Total Orders by Hour of Day')
+    ax.set_xlabel('Hour of Day (24-hour)')
+    ax.set_ylabel('Total Orders')
+    ax.set_xticks(range(0, 24, 2)) # Show every other hour
+    ax.grid(True)
+    st.pyplot(fig)
+
+with hourly_col2:
+    # --- Hourly Trend for Revenue ---
+    st.subheader("Total Revenue by Hour of Day")
+    hourly_revenue = df_filtered.groupby('order_hour').agg(
+        Total_Revenue=('total_price', 'sum')
+    ).reset_index().sort_values('order_hour')
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    sns.lineplot(data=hourly_revenue, x='order_hour', y='Total_Revenue', marker='o', ax=ax)
+    ax.set_title('Total Revenue by Hour of Day')
+    ax.set_xlabel('Hour of Day (24-hour)')
+    ax.set_ylabel('Total Revenue ($)')
+    ax.set_xticks(range(0, 24, 2)) # Show every other hour
+    ax.grid(True)
+    st.pyplot(fig)
+
+st.markdown("---")
+
+
+# --- Category, Size, and Top Sellers Analysis ---
+st.header("Product Performance")
+
+prod_col1, prod_col2 = st.columns(2)
+
+with prod_col1:
     # --- % of Sales by Pizza Category (Donut Chart) ---
     st.subheader("% of Sales by Pizza Category")
     category_sales = df_filtered.groupby('pizza_category').agg(
@@ -137,18 +215,21 @@ with row2_col1:
     ).reset_index()
 
     total_revenue_cat = category_sales['Total_Revenue'].sum()
-    category_sales['PCT'] = (category_sales['Total_Revenue'] / total_revenue_cat) * 100
+    if total_revenue_cat > 0: # Avoid division by zero
+        category_sales['PCT'] = (category_sales['Total_Revenue'] / total_revenue_cat) * 100
+    else:
+        category_sales['PCT'] = 0
 
     fig, ax = plt.subplots(figsize=(8, 8))
     ax.pie(category_sales['PCT'], labels=category_sales['pizza_category'], autopct='%1.1f%%', startangle=90, pctdistance=0.85)
     ax.set_title('% of Sales by Pizza Category')
-    ax.axis('equal')
+    ax.axis('equal') # Equal aspect ratio ensures that pie is drawn as a circle.
     centre_circle = plt.Circle((0,0), 0.70, fc='white')
     ax.add_artist(centre_circle)
     st.pyplot(fig)
 
 
-with row2_col2:
+with prod_col2:
     # --- % of Sales by Pizza Size (Bar Chart) ---
     st.subheader("% of Sales by Pizza Size")
     size_sales = df_filtered.groupby('pizza_size').agg(
@@ -156,7 +237,10 @@ with row2_col2:
     ).reset_index()
 
     total_revenue_size = size_sales['Total_Revenue'].sum()
-    size_sales['PCT'] = (size_sales['Total_Revenue'] / total_revenue_size) * 100
+    if total_revenue_size > 0: # Avoid division by zero
+        size_sales['PCT'] = (size_sales['Total_Revenue'] / total_revenue_size) * 100
+    else:
+        size_sales['PCT'] = 0
 
     size_order = ['S', 'M', 'L', 'XL', 'XXL']
     size_sales['pizza_size'] = pd.Categorical(size_sales['pizza_size'], categories=size_order, ordered=True)
@@ -170,7 +254,9 @@ with row2_col2:
     st.pyplot(fig)
 
 
-with row3_col1:
+top_sellers_col1, top_sellers_col2 = st.columns(2)
+
+with top_sellers_col1:
     # --- Top 5 Best Sellers by Revenue (Bar Chart) ---
     st.subheader("Top 5 Best Sellers by Revenue")
     top_5_revenue = df_filtered.groupby('pizza_name').agg(
@@ -184,8 +270,7 @@ with row3_col1:
     ax.set_ylabel('Pizza Name')
     st.pyplot(fig)
 
-
-with row3_col2:
+with top_sellers_col2:
     # --- Top 5 Best Sellers by Quantity (Bar Chart) ---
     st.subheader("Top 5 Best Sellers by Quantity")
     top_5_quantity = df_filtered.groupby('pizza_name').agg(
@@ -199,19 +284,20 @@ with row3_col2:
     ax.set_ylabel('Pizza Name')
     st.pyplot(fig)
 
-with row4_col1:
-    # --- Top 5 Best Sellers by Total Orders (Bar Chart) ---
-    st.subheader("Top 5 Best Sellers by Total Orders")
-    top_5_orders = df_filtered.groupby('pizza_name').agg(
-        Total_Orders=('order_id', 'nunique')
-    ).reset_index().sort_values('Total_Orders', ascending=False).head(5)
 
-    fig, ax = plt.subplots(figsize=(10, 5))
-    sns.barplot(data=top_5_orders, x='Total_Orders', y='pizza_name', palette='viridis', ax=ax)
-    ax.set_title('Top 5 Best Sellers by Total Orders')
-    ax.set_xlabel('Total Orders')
-    ax.set_ylabel('Pizza Name')
-    st.pyplot(fig)
+# You could add another chart here for Top 5 by Total Orders if space allows
+# with st.container():
+#     st.subheader("Top 5 Best Sellers by Total Orders")
+#     top_5_orders = df_filtered.groupby('pizza_name').agg(
+#         Total_Orders=('order_id', 'nunique')
+#     ).reset_index().sort_values('Total_Orders', ascending=False).head(5)
+#     fig, ax = plt.subplots(figsize=(12, 6))
+#     sns.barplot(data=top_5_orders, x='Total_Orders', y='pizza_name', palette='viridis', ax=ax)
+#     ax.set_title('Top 5 Best Sellers by Total Orders')
+#     ax.set_xlabel('Total Orders')
+#     ax.set_ylabel('Pizza Name')
+#     st.pyplot(fig)
+
 
 st.markdown("---")
-st.markdown("This dashboard provides insights into pizza sales data, allowing you to track key performance indicators and visualize trends by month, day, pizza category, size, and top-selling pizzas.")
+st.markdown("This interactive dashboard allows you to explore pizza sales data with various filters and insights into trends, product performance, and hourly activity.")
