@@ -7,7 +7,7 @@ import datetime
 # Set Streamlit page configuration
 st.set_page_config(layout="wide", page_title="Enhanced Pizza Sales Dashboard")
 
-st.title("🍕 Enhanced Pizza Sales Dashboard")
+st.title("🍕 Pizza Sales Dashboard")
 
 # --- Data Loading and Preprocessing ---
 @st.cache_data # Cache data to prevent re-loading on every rerun
